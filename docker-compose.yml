@@ -1,0 +1,69 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres   # maintenance DB
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - rt-network
+
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/realtime_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_JPA_HIBERNATE_DDL-AUTO: update
+      SPRING_JPA_SHOW-SQL: false
+    networks:
+      - rt-network
+
+  ai-service:
+    build: ./ai-service
+    container_name: ai-service
+    ports:
+     - "5000:5000"
+    networks:
+      - rt-network
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    networks:
+      - rt-network
+    volumes:
+      - frontend-build:/usr/share/nginx/html:ro
+
+  nginx:
+    image: nginx:alpine
+    container_name: gateway
+    depends_on:
+      - frontend
+      - backend
+      - ai-service
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - frontend-build:/usr/share/nginx/html:ro
+    ports:
+      - '80:80'
+    networks:
+      - rt-network
+
+volumes:
+  db-data:
+  frontend-build:
+
+networks:
+  rt-network:
+    driver: bridge
